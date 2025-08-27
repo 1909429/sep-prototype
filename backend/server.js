@@ -2,7 +2,7 @@
 const express = require('express');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');                 // Pure-JS bcrypt to avoid native build issues
+const bcrypt = require('bcryptjs');                 // pure-JS bcrypt
 const Database = require('better-sqlite3');
 const path = require('path');
 
@@ -94,7 +94,8 @@ app.post('/api/login', async (req, res) => {
     const row = db.prepare('SELECT * FROM users WHERE email=?').get(email);
     if (!row) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const ok = await bcrypt.compare(password, row.password_hash);
+    // bcryptjs sync compare
+    const ok = bcrypt.compareSync(password, row.password_hash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
     await influxReady(); // Optional: replace with stricter checks if needed
@@ -220,18 +221,16 @@ app.post('/api/influx/verify', auth, async (req, res) => {
       });
       bucketReadable = true;
     } catch (_) {
-      // If this fails, keep bucketReadable=false; the token may not have read perms for this bucket.
+      // keep false
     }
 
-    // C) Token validity heuristic:
-    // If we can read the bucket or at least resolve the org, consider the token OK.
+    // C) Token validity heuristic
     const tokenOK = bucketReadable || orgOK;
 
-    // D) Optional: Check if the user exists in the org (may require additional permissions).
+    // D) Optional: user existence in org
     let userCheck = { existsInOrg: 'unknown', userId: null, reason: null };
     if (name) {
       try {
-        // Prefer org members endpoint
         const orgX = orgID || orgParam;
         const { data } = await influx.get(`/api/v2/orgs/${orgX}/members`);
         const list = data.users || data.members || [];
@@ -239,7 +238,6 @@ app.post('/api/influx/verify', auth, async (req, res) => {
         if (hit) userCheck = { existsInOrg: true, userId: (hit.id || hit.user?.id) || null, reason: null };
         else userCheck = { existsInOrg: false, userId: null, reason: null };
       } catch {
-        // Fallback to /users if /members is not permitted by the token
         try {
           const { data } = await influx.get('/api/v2/users');
           const hit = (data.users || []).find(u => u.name === name);
@@ -266,7 +264,7 @@ app.post('/api/influx/verify', auth, async (req, res) => {
 
 const port = Number(process.env.PORT || 3000);
 app.listen(port, () => {
-  // Print minimal, non-sensitive env info to help debugging
+  // Minimal, non-sensitive env info for debugging
   console.log(`Server running: http://localhost:${port}`);
   console.log('[Influx ENV]', {
     host: process.env.INFLUX_HOST,
